@@ -38,7 +38,7 @@ use hound;
 #[cfg(feature = "sortformer")]
 use parakeet_rs::sortformer::{DiarizationConfig, Sortformer};
 #[cfg(feature = "sortformer")]
-use parakeet_rs::{TimestampMode, Transcriber};
+use parakeet_rs::{ExecutionConfig, ExecutionProvider, TimestampMode, Transcriber};
 #[cfg(feature = "sortformer")]
 use std::env;
 #[cfg(feature = "sortformer")]
@@ -85,13 +85,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             duration
         );
 
+        // Build execution config: use CUDA if available, fallback to CPU
+        let exec_config = ExecutionConfig::new()
+            .with_execution_provider(ExecutionProvider::Cuda);
+        println!("Execution provider: {:?}", exec_config.execution_provider);
+
         println!("{}", "=".repeat(80));
         println!("Step 2/3: Performing speaker diarization with Sortformer v2 (streaming)...");
 
-        // Create Sortformer with default config (callhome)
+        // Create Sortformer with CUDA config (callhome)
         let mut sortformer = Sortformer::with_config(
             "diar_streaming_sortformer_4spk-v2.onnx",
-            None, // default exec config
+            Some(exec_config.clone()),
             DiarizationConfig::callhome(),
         )?;
 
@@ -126,8 +131,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n{}", "=".repeat(80));
         println!("Step 3/3: Transcribing with Parakeet-TDT and attributing speakers...\n");
 
-        // Use TDT for transcription with sentence-level timestamps
-        let mut parakeet = parakeet_rs::ParakeetTDT::from_pretrained("./tdt", None)?;
+        // Use TDT for transcription with sentence-level timestamps (CUDA)
+        let mut parakeet = parakeet_rs::ParakeetTDT::from_pretrained("./tdt", Some(exec_config))?;
 
         // Transcribe with Sentences mode (TDT provides punctuation for proper segmentation)
         if let Ok(result) = parakeet.transcribe_samples(
